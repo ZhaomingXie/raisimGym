@@ -9,6 +9,7 @@ import os
 import math
 import argparse
 
+
 # configuration
 parser = argparse.ArgumentParser()
 parser.add_argument('--cfg', type=str, default=os.path.abspath(__RSCDIR__ + "/default_cfg.yaml"),

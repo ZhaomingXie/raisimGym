@@ -86,7 +86,7 @@ class ENVIRONMENT : public RaisimGymEnv {
     anymal_->setGeneralizedForce(Eigen::VectorXd::Zero(gvDim_));
 
     /// MUST BE DONE FOR ALL ENVIRONMENTS
-    obDim_ = 68; /// convention described on top
+    obDim_ = 34; /// convention described on top
     actionDim_ = nJoints_;
     actionMean_.setZero(actionDim_); actionStd_.setZero(actionDim_);
     obMean_.setZero(obDim_); obStd_.setZero(obDim_);
@@ -99,20 +99,9 @@ class ENVIRONMENT : public RaisimGymEnv {
         0.0, 0.0, 0.0, /// gravity axis 3
         gc_init_.tail(12), /// joint position 12
         Eigen::VectorXd::Constant(6, 0.0), /// body lin/ang vel 6
-        Eigen::VectorXd::Constant(12, 0.0), 
-        0.44, /// average height
-        0.0, 0.0, 0.0, /// gravity axis 3
-        gc_init_.tail(12), /// joint position 12
-        Eigen::VectorXd::Constant(6, 0.0), /// body lin/ang vel 6
         Eigen::VectorXd::Constant(12, 0.0); /// joint vel history
 
     obStd_ << 0.12, /// average height
-        Eigen::VectorXd::Constant(3, 0.7), /// gravity axes angles
-        Eigen::VectorXd::Constant(12, 1.0 / 1.0), /// joint angles
-        Eigen::VectorXd::Constant(3, 2.0), /// linear velocity
-        Eigen::VectorXd::Constant(3, 4.0), /// angular velocities
-        Eigen::VectorXd::Constant(12, 10.0),
-         0.12, /// average height
         Eigen::VectorXd::Constant(3, 0.7), /// gravity axes angles
         Eigen::VectorXd::Constant(12, 1.0 / 1.0), /// joint angles
         Eigen::VectorXd::Constant(3, 2.0), /// linear velocity
@@ -159,7 +148,6 @@ class ENVIRONMENT : public RaisimGymEnv {
 
   void reset() final {
     anymal_->setState(gc_init_, gv_init_);
-    updateObservationHist();
     updateObservation();
     if(visualizable_)
       gui::rewardLogger.clean();
@@ -186,7 +174,6 @@ class ENVIRONMENT : public RaisimGymEnv {
     }
 
     updateObservation();
-    updateObservationHist();
 
     torqueReward_ = torqueRewardCoeff_ * anymal_->getGeneralizedForce().squaredNorm();
     //forwardVelReward_ = forwardVelRewardCoeff_ * exp(-2*pow(bodyLinearVel_[0] - 1.0, 2)-2*pow(bodyAngularVel_[1] - 0, 2));
@@ -215,6 +202,7 @@ class ENVIRONMENT : public RaisimGymEnv {
     anymal_->getState(gc_, gv_);
     obDouble_.setZero(obDim_); obScaled_.setZero(obDim_);
 
+    /// body height
     obDouble_[0] = gc_[2];
 
     /// body orientation
@@ -234,28 +222,15 @@ class ENVIRONMENT : public RaisimGymEnv {
     obDouble_.segment(19, 3) = bodyAngularVel_;
 
     /// joint velocities
-    obDouble_.segment(22, 12) = gv_.tail(12);
-    obDouble_.tail(34) = obDouble_His_.tail(34);
-
+    obDouble_.tail(12) = gv_.tail(12);
     obScaled_ = (obDouble_-obMean_).cwiseQuotient(obStd_);
   }
 
   void updateObservationHist() {
-    obDouble_His_.setZero(obDim_ / 2);
-    anymal_->getState(gc_, gv_);
-    obDouble_His_[0] = gc_[2];
-    raisim::Vec<4> quat;
-    raisim::Mat<3,3> rot;
-    quat[0] = gc_[3]; quat[1] = gc_[4]; quat[2] = gc_[5]; quat[3] = gc_[6];
-    raisim::quatToRotMat(quat, rot);
-    obDouble_His_.segment(1, 3) = rot.e().row(2);
-    obDouble_His_.segment(4, 12) = gc_.tail(12);
-    bodyLinearVel_ = rot.e().transpose() * gv_.segment(0, 3);
-    bodyAngularVel_ = rot.e().transpose() * gv_.segment(3, 3);
-    obDouble_His_.segment(16, 3) = bodyLinearVel_;
-    obDouble_His_.segment(19, 3) = bodyAngularVel_;
-    /// joint velocities
-    obDouble_His_.tail(12) = gv_.tail(12);
+    obDouble_His_.setZero(obDim_);
+    obScaled_His_.setZero(obDim_);
+    obDouble_His_.segment(0, obDim_) = obDouble_.segment(0, obDim_);
+    obScaled_His_ = (obDouble_His_ - obMean_).cwiseQuotient(obStd_);
   }
 
   void observe(Eigen::Ref<EigenVec> ob) final {
